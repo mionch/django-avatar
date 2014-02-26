@@ -53,6 +53,7 @@ setup(
         ],
     },
     install_requires=[
+        'django>=1.4',
         'Pillow>=2.0',
         'django-appconf>=0.6',
     ],

@@ -7,6 +7,7 @@ from django.db import models
 from django.core.files import File
 from django.core.files.base import ContentFile
 from django.core.files.storage import get_storage_class
+from django.db.models.manager import Manager
 from django.utils.translation import ugettext as _
 from django.utils import six
 from django.db.models import signals
@@ -45,7 +46,7 @@ def avatar_file_path(instance=None, filename=None, size=None, ext=None):
         if settings.AVATAR_HASH_FILENAMES:
             (root, ext) = os.path.splitext(filename)
             filename = hashlib.md5(force_bytes(filename)).hexdigest()
-            filename = filename + ext
+            filename += ext
     if size:
         tmppath.extend(['resized', str(size)])
     tmppath.append(os.path.basename(filename))
@@ -61,6 +62,28 @@ def find_extension(format):
     return format
 
 
+class AvatarManager(Manager):
+    default_name = 'av'
+
+    @staticmethod
+    def set_avatar(user, file_content, social=None):
+        current_avatar = Avatar.objects.get(social=social)
+        print current_avatar
+
+        """
+        avatar = Avatar(user=request.user, primary=True)
+        image_file = request.FILES['avatar']
+        avatar.avatar.save(image_file.name, image_file)
+        avatar.save()
+        messages.success(request, _("Successfully uploaded a new avatar."))
+        avatar_updated.send(sender=Avatar, user=request.user, avatar=avatar)
+        """
+        pass
+
+    def update_social_avatar(self, social):
+        pass
+
+
 class Avatar(models.Model):
     user = models.ForeignKey(getattr(settings, 'AUTH_USER_MODEL', 'auth.User'))
     primary = models.BooleanField(default=False)
@@ -68,7 +91,10 @@ class Avatar(models.Model):
                                upload_to=avatar_file_path,
                                storage=avatar_storage,
                                blank=True)
+    social = models.CharField(max_length=200, blank=True)
     date_uploaded = models.DateTimeField(default=now)
+
+    objects = AvatarManager()
 
     def __unicode__(self):
         return _(six.u('Avatar for %s')) % self.user
