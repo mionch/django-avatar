@@ -23,6 +23,8 @@ class AvatarConf(AppConf):
     STORAGE = settings.DEFAULT_FILE_STORAGE
     CLEANUP_DELETED = False
     AUTO_GENERATE_SIZES = (DEFAULT_SIZE,)
+    # -1 do not refresh, 0 refresh every time
+    SOCIAL_AVATAR_REFRESH_DAYS = 0
 
     def configure_auto_generate_sizes(self, value):
         return getattr(settings, 'AUTO_GENERATE_AVATAR_SIZES', None) or value

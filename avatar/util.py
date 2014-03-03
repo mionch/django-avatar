@@ -118,11 +118,18 @@ def get_primary_avatar(user, size=settings.AVATAR_DEFAULT_SIZE):
         except User.DoesNotExist:
             return None
     try:
-        # Order by -primary first; this means if a primary=True avatar exists
-        # it will be first, and then ordered by date uploaded, otherwise a
-        # primary=False avatar will be first.  Exactly the fallback behavior we
-        # want.
-        avatar = user.avatar_set.order_by("-primary", "-date_uploaded")[0]
+        # Custom ordering - if no avatar is primary and a user has uploaded his own avatar, return it, otherwise,
+        # return the oldest social av
+        avatars = user.avatar_set.order_by("-primary", "date_uploaded")
+        primary_avatars = avatars.filter(primary=True)
+        if len(primary_avatars) > 1:
+            avatar = primary_avatars[0]
+        else:
+            main_avatars = avatars.filter(social='')
+            if len(main_avatars) > 1:
+                avatar = main_avatars[0]
+            else:
+                avatar = avatars[0]
     except IndexError:
         avatar = None
     if avatar:

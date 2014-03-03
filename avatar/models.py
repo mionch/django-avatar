@@ -2,6 +2,7 @@ import datetime
 import os
 import hashlib
 from PIL import Image
+from django.core.exceptions import ObjectDoesNotExist
 
 from django.db import models
 from django.core.files import File
@@ -13,6 +14,7 @@ from django.utils import six
 from django.db.models import signals
 
 from avatar.conf import settings
+from avatar.signals import avatar_updated
 from avatar.util import get_username, force_bytes, invalidate_cache
 
 try:
@@ -63,41 +65,56 @@ def find_extension(format):
 
 
 class AvatarManager(Manager):
-    default_name = 'av'
+    default_name = 'avatar'
 
-    @staticmethod
-    def set_avatar(user, file_content, social=None):
-        current_avatar = Avatar.objects.get(social=social)
-        print current_avatar
+    @classmethod
+    def set_avatar(cls, user, file_content, social=None):
+        try:
+            print user.avatar_set.all()
+            avatar = user.avatar_set.get(social=social)
+        except ObjectDoesNotExist:
+            avatar = None
 
-        """
-        avatar = Avatar(user=request.user, primary=True)
-        image_file = request.FILES['avatar']
-        avatar.avatar.save(image_file.name, image_file)
-        avatar.save()
-        messages.success(request, _("Successfully uploaded a new avatar."))
-        avatar_updated.send(sender=Avatar, user=request.user, avatar=avatar)
-        """
-        pass
+        filename = "%s.jpg" % (cls.default_name if social is None else social)
+        if avatar is None:
+            # No avatar was set for this category, add it
+            print 'Creating %s avatar for %s' % ('main' if social is None else social, user)
+            avatar = Avatar(user=user, primary=False, social=social)
+            avatar.update_picture(filename, file_content)
+            return
 
-    def update_social_avatar(self, social):
-        pass
+        print 'Avatar already found!'
+        # If the avatar is social, check if it needs to be updated
+        if social is not None:
+            # Setting set to never refresh
+            if settings.SOCIAL_AVATAR_REFRESH_DAYS < 0:
+                return
+
+            avatar_age = now() - avatar.date_uploaded
+            if avatar_age.days < settings.SOCIAL_AVATAR_REFRESH_DAYS:
+                # Avatar does not yet to be refreshed
+                return
+
+        # Avatar is not social or social avatar has expired, update the picture
+        avatar.update_picture(filename, file_content)
 
 
 class Avatar(models.Model):
     user = models.ForeignKey(getattr(settings, 'AUTH_USER_MODEL', 'auth.User'))
     primary = models.BooleanField(default=False)
-    avatar = models.ImageField(max_length=1024,
-                               upload_to=avatar_file_path,
-                               storage=avatar_storage,
-                               blank=True)
+    avatar = models.ImageField(max_length=1024, upload_to=avatar_file_path, storage=avatar_storage, blank=True)
     social = models.CharField(max_length=200, blank=True)
     date_uploaded = models.DateTimeField(default=now)
 
     objects = AvatarManager()
 
     def __unicode__(self):
-        return _(six.u('Avatar for %s')) % self.user
+        return _(six.u('%s avatar for %s')) % ("Main" if self.social is None else self.social, self.user)
+
+    def update_picture(self, filename, file_content):
+        self.avatar.save(filename, file_content)
+        self.save()
+        avatar_updated.send(sender=Avatar, user=self.user, avatar=self)
 
     def save(self, *args, **kwargs):
         avatars = Avatar.objects.filter(user=self.user)
