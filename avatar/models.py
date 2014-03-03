@@ -78,12 +78,10 @@ class AvatarManager(Manager):
         filename = "%s.jpg" % (cls.default_name if social is None else social)
         if avatar is None:
             # No avatar was set for this category, add it
-            print 'Creating %s avatar for %s' % ('main' if social is None else social, user)
             avatar = Avatar(user=user, primary=False, social=social)
             avatar.update_picture(filename, file_content)
             return
 
-        print 'Avatar already found!'
         # If the avatar is social, check if it needs to be updated
         if social is not None:
             # Setting set to never refresh
