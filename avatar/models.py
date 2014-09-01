@@ -68,14 +68,14 @@ class AvatarManager(Manager):
     default_name = 'avatar'
 
     @classmethod
-    def set_avatar(cls, user, file_content, social=None):
+    def set_avatar(cls, user, file_content, file_extension='jpg', social=None):
         try:
             print user.avatar_set.all()
             avatar = user.avatar_set.get(social=social)
         except ObjectDoesNotExist:
             avatar = None
 
-        filename = "%s.jpg" % (cls.default_name if social is None else social)
+        filename = "%s.%s" % (cls.default_name if social is None else social, file_extension)
         if avatar is None:
             # No avatar was set for this category, add it
             avatar = Avatar(user=user, primary=False, social=social)
@@ -83,7 +83,7 @@ class AvatarManager(Manager):
             return
 
         # If the avatar is social, check if it needs to be updated
-        if social is not None:
+        if social is not None and social != Avatar.NON_SOCIAL:
             # Setting set to never refresh
             if settings.SOCIAL_AVATAR_REFRESH_DAYS < 0:
                 return
@@ -98,10 +98,13 @@ class AvatarManager(Manager):
 
 
 class Avatar(models.Model):
-    user = models.ForeignKey(getattr(settings, 'AUTH_USER_MODEL', 'auth.User'))
+    NON_SOCIAL = 'default'
+
+    user = models.ForeignKey(getattr(settings, 'AVATAR_AUTH_USER_MODEL',
+                                     getattr(settings, 'AUTH_USER_MODEL', 'auth.User')))
     primary = models.BooleanField(default=False)
     avatar = models.ImageField(max_length=1024, upload_to=avatar_file_path, storage=avatar_storage, blank=True)
-    social = models.CharField(max_length=200, blank=True)
+    social = models.CharField(max_length=200, blank=True, default=NON_SOCIAL)
     date_uploaded = models.DateTimeField(default=now)
 
     objects = AvatarManager()
@@ -110,6 +113,7 @@ class Avatar(models.Model):
         return _(six.u('%s avatar for %s')) % ("Main" if self.social is None else self.social, self.user)
 
     def update_picture(self, filename, file_content):
+        remove_avatar_thumbnails(instance=self)
         self.avatar.save(filename, file_content)
         self.save()
         avatar_updated.send(sender=Avatar, user=self.user, avatar=self)
@@ -153,7 +157,8 @@ class Avatar(models.Model):
             else:
                 thumb_file = File(orig)
             thumb = self.avatar.storage.save(self.avatar_name(size), thumb_file)
-        except IOError:
+        except IOError as e:
+            print "IOERROR while resizing image", e
             return  # What should we do here?  Render a "sorry, didn't work" img?
 
     def avatar_url(self, size):
@@ -187,6 +192,13 @@ def remove_avatar_images(instance=None, **kwargs):
         if instance.thumbnail_exists(size):
             instance.avatar.storage.delete(instance.avatar_name(size))
     instance.avatar.storage.delete(instance.avatar.name)
+
+
+def remove_avatar_thumbnails(instance=None, **kwargs):
+    for size in settings.AVATAR_AUTO_GENERATE_SIZES:
+        if instance.thumbnail_exists(size):
+            instance.avatar.storage.delete(instance.avatar_name(size))
+    invalidate_cache(instance.user)
 
 
 signals.post_save.connect(create_default_thumbnails, sender=Avatar)
