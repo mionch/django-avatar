@@ -68,7 +68,7 @@ class AvatarManager(Manager):
     default_name = 'avatar'
 
     @classmethod
-    def set_avatar(cls, user, file_content, file_extension='jpg', social=None):
+    def set_avatar(cls, user, file_content, file_extension='jpg', social=None, primary=True):
         try:
             print user.avatar_set.all()
             avatar = user.avatar_set.get(social=social)
@@ -78,7 +78,7 @@ class AvatarManager(Manager):
         filename = "%s.%s" % (cls.default_name if social is None else social, file_extension)
         if avatar is None:
             # No avatar was set for this category, add it
-            avatar = Avatar(user=user, primary=False, social=social)
+            avatar = Avatar(user=user, primary=primary, social=social)
             avatar.update_picture(filename, file_content)
             return
 
@@ -195,10 +195,11 @@ def remove_avatar_images(instance=None, **kwargs):
 
 
 def remove_avatar_thumbnails(instance=None, **kwargs):
-    for size in settings.AVATAR_AUTO_GENERATE_SIZES:
-        if instance.thumbnail_exists(size):
-            instance.avatar.storage.delete(instance.avatar_name(size))
-    invalidate_cache(instance.user)
+    if instance.avatar:
+        for size in settings.AVATAR_AUTO_GENERATE_SIZES:
+            if instance.thumbnail_exists(size):
+                instance.avatar.storage.delete(instance.avatar_name(size))
+        invalidate_cache(instance.user)
 
 
 signals.post_save.connect(create_default_thumbnails, sender=Avatar)
